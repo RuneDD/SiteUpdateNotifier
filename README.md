@@ -8,8 +8,11 @@ Please note that the effectiveness of the script might be impacted if the webpag
 
 This script utilizes the BeautifulSoup library to ensure accurate monitoring of webpages. By parsing the HTML content, it filters out non-visual elements such as metadata, scripts, and styles. This ensures that notifications are triggered only by genuine visual changes on the page, reducing the chances of false alerts due to minor metadata modifications.
 
+**URL Validation and Fault Tolerance**
+The script includes URL validation to ensure that the provided URL is well-formed and starts with "http://" or "https://". If the URL is not valid, a detailed error message will be logged. The script is also designed to handle exceptions gracefully, such as connection errors or timeouts, and will log these errors without crashing.
+
 **Make sure to install the required libraries**
 
 ```
-pip install requests plyer beautifulsoup4
+pip install requests plyer beautifulsoup4 validators
 ```
