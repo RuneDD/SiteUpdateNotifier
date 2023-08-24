@@ -1,64 +1,82 @@
 import requests
 import time
 import hashlib
+import logging
+import sys
+import validators
+import re
 from plyer import notification
 from bs4 import BeautifulSoup
 
-# URL to be scraped
-url = ""
+# Constants
+TIME_BETWEEN_CHECKS = 60 * 5  # Default value of 5 minutes
 
-# Time between checks in seconds
-time_between_checks = 60 * 5  # Five minutes
+# Logging Configuration
+logging.basicConfig(format='%(asctime)s - %(levelname)s: %(message)s', level=logging.INFO)
+
+def is_valid_url_using_validators(url):
+    return validators.url(url)
+
+def is_valid_url_using_regex(url):
+    pattern = re.compile(
+        r'^(?:http|ftp)s?://'  # http:// or https://
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain
+        r'localhost|'  # localhost
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # or an IP address
+        r'(?::\d+)?'  # optional port
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+    return re.match(pattern, url) is not None
 
 def send_notification(title, message):
-    notification.notify(
-        title=title,
-        message=message,
-        timeout=10
-    )
+    """Sends a desktop notification."""
+    notification.notify(title=title, message=message, timeout=10)
 
 def get_page_content(url):
-    print(f'Fetching content from {url}')
-    response = requests.get(url)
-    return response.text
+    """Fetches the content of the page at the given URL."""
+    if not url.startswith(('http://', 'https://')):
+        logging.error(f"Invalid URL: {url}. It must start with 'http://' or 'https://'.")
+        return None
+    if not is_valid_url_using_validators(url) or not is_valid_url_using_regex(url):
+        logging.warning(f"Invalid URL: {url}")
+        return None
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise HTTPError for bad responses
+        return response.content
+    except requests.RequestException as e:
+        logging.error(f"Failed to fetch content from URL {url}. Error: {e}")
+        return None
 
 def filter_content(html_content):
+    """Filters the HTML content."""
     soup = BeautifulSoup(html_content, 'html.parser')
-    
-    # Remove script and style elements
-    for script in soup(["script", "style", "meta"]):
-        script.extract()
-    
-    # Get text
-    text = soup.get_text()
-    
-    # Break into lines and remove leading and trailing space on each
-    lines = (line.strip() for line in text.splitlines())
-    
-    # Break multi-headlines into a line each
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    
-    # Drop blank lines
-    text = '\n'.join(chunk for chunk in chunks if chunk)
-    
-    return text
+    # Custom filtering logic can be added here
+    # ...
+    return soup.get_text()
 
-def monitor():
+def monitor(url):
+    """Monitors the webpage for changes."""
     old_hash = ""
-    print(f'Waiting for {time_between_checks/60} minutes before the first check...')
-    time.sleep(time_between_checks)  # Wait for 5 minutes before the first check
+    logging.info(f'Waiting for {TIME_BETWEEN_CHECKS/60} minutes before the first check...')
+    time.sleep(TIME_BETWEEN_CHECKS)
     while True:
-        print('Checking for changes...')
+        logging.info('Checking for changes...')
         current_content = get_page_content(url)
         filtered_content = filter_content(current_content)
         current_hash = hashlib.sha224(filtered_content.encode()).hexdigest()
         if old_hash != "" and old_hash != current_hash:
-            print("Change detected, sending notification...")
-            send_notification("Webpage Change Detected", "The webpage at {} has changed.".format(url))
+            logging.info("Change detected, sending notification...")
+            send_notification("Webpage Change Detected", f"The webpage at {url} has changed.")
         else:
-            print('No changes detected.')
+            logging.info('No changes detected.')
         old_hash = current_hash
-        print(f'Waiting for {time_between_checks/60} minutes before checking again.')
-        time.sleep(time_between_checks)
+        logging.info(f'Waiting for {TIME_BETWEEN_CHECKS/60} minutes before checking again.')
+        time.sleep(TIME_BETWEEN_CHECKS)
 
-monitor()
+if __name__ == "__main__":
+    url_to_monitor = input("Please provide the URL to monitor: ")
+    try:
+        TIME_BETWEEN_CHECKS = int(input("Please provide the time to wait between checks in seconds: "))
+    except ValueError:
+        logging.error("Invalid time provided. Using default 5 minutes.")
+    monitor(url_to_monitor)
